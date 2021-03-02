@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	metricNamespace = "aws_admission_controller"
+	metricNamespace = "capi_core_converter"
 	metricSubsystem = "webhook"
 )
 
