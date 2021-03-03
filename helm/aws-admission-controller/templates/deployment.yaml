@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "resource.default.name" . }}
+  namespace: {{ include "resource.default.namespace" . }}
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+  {{- include "labels.selector" . | nindent 6 }}
+  {{- with .Values.deploymentStrategy }}
+  strategy:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        releaseRevision: {{ .Release.Revision | quote }}
+      labels:
+        {{- include "labels.common" . | nindent 8 }}
+    spec:
+      volumes:
+        - name: {{ include "name" . }}-certificates
+          secret:
+            secretName: {{ include "resource.default.name"  . }}-certificates
+      serviceAccountName: {{ include "resource.default.name"  . }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: {{ include "name" . }}
+          image: "{{ .Values.Installation.V1.Registry.Domain }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+          env:
+            - name: DEFAULT_AWS_AZS
+              value: {{ join "," .Values.Installation.V1.Provider.AWS.AvailabilityZones }}
+            - name: DEFAULT_DOCKER_CIDR
+              value: {{ .Values.Installation.V1.Guest.Docker.CIDR }}
+            - name: DEFAULT_IPAM_NETWORKCIDR
+              value: {{ .Values.Installation.V1.Guest.IPAM.NetworkCIDR }}
+            - name: DEFAULT_KUBERNETES_ADMIN_GROUP
+              value: {{ .Values.Installation.V1.Kubernetes.Auth.TenantAdminTargetGroup }}
+            - name: DEFAULT_KUBERNETES_ALL_GROUP
+              value: {{ .Values.Installation.V1.Kubernetes.Auth.ViewAllTargetGroup }}
+            - name: DEFAULT_KUBERNETES_CLUSTER_IP_RANGE
+              value: {{ .Values.Installation.V1.Guest.Kubernetes.API.ClusterIPRange }}
+            - name: DEFAULT_KUBERNETES_ENDPOINT              
+              value: {{ .Values.Installation.V1.Guest.Kubernetes.API.EndpointBase }}
+            - name: DEFAULT_AWS_INSTANCE_TYPES
+              value: {{ join "," .Values.Installation.V1.Provider.AWS.EC2.Instance.Allowed }}
+            - name: DEFAULT_AWS_REGION
+              value: {{ .Values.Installation.V1.Provider.AWS.Region }}
+            - name: DEFAULT_AWS_POD_CIDR
+              value: "{{ .Values.Installation.V1.Guest.Calico.CIDR }}"
+            - name: DEFAULT_AWS_POD_SUBNET
+              value: {{ .Values.Installation.V1.Guest.Calico.Subnet }}
+          args:
+            - ./core-conversion-webhook
+            - --admin-group=$(DEFAULT_KUBERNETES_ADMIN_GROUP)
+            - --all-target-group=$(DEFAULT_KUBERNETES_ALL_GROUP)
+            - --availability-zones=$(DEFAULT_AWS_AZS)
+            - --docker-cidr=$(DEFAULT_DOCKER_CIDR)
+            - --endpoint=$(DEFAULT_KUBERNETES_ENDPOINT)
+            - --ipam-network-cidr=$(DEFAULT_IPAM_NETWORKCIDR)
+            - --kubernetes-cluster-ip-range=$(DEFAULT_KUBERNETES_CLUSTER_IP_RANGE)
+            - --master-instance-types=$(DEFAULT_AWS_INSTANCE_TYPES)
+            - --pod-cidr=$(DEFAULT_AWS_POD_CIDR)
+            - --pod-subnet=$(DEFAULT_AWS_POD_SUBNET)
+            - --region=$(DEFAULT_AWS_REGION)
+            - --tls-cert-file=/certs/ca.crt
+            - --tls-key-file=/certs/tls.key
+          volumeMounts:
+          - name: {{ include "name" . }}-certificates
+            mountPath: "/certs"
+          ports:
+          - containerPort: 8443
+            name: webhook
+          - containerPort: 8080
+            name: metrics
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              scheme: HTTPS
+              port: 8443
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              scheme: HTTPS
+              port: 8443
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 150Mi
+            limits:
+              cpu: 250m
+              memory: 250Mi

@@ -1,0 +1,268 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "resource.default.name" . }}
+  namespace: {{ include "resource.default.namespace" . }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "resource.default.namespace" . }}/{{ include "resource.default.name" . }}-certificates
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+webhooks:
+  - name: awsclusters.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /mutate/awscluster
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - awsclusters
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+  - name: awsmachinedeployments.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /mutate/awsmachinedeployment
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - awsmachinedeployments
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+  - name: awscontrolplanes.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: NoneOnDryRun
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /mutate/awscontrolplane
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - "awscontrolplanes"
+        apiVersions:
+          - "v1alpha2"
+        operations:
+          - CREATE
+          - UPDATE
+  - name: clusters.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /mutate/cluster
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["cluster.x-k8s.io"]
+        resources:
+          - clusters
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+  - name: g8scontrolplanes.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: NoneOnDryRun
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /mutate/g8scontrolplane
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - "g8scontrolplanes"
+        apiVersions:
+          - "v1alpha2"
+        operations:
+          - CREATE
+          - UPDATE
+  - name: machinedeployments.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /mutate/machinedeployment
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["cluster.x-k8s.io"]
+        resources:
+          - machinedeployments
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "resource.default.name" . }}
+  namespace: {{ include "resource.default.namespace" . }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "resource.default.namespace" . }}/{{ include "resource.default.name" . }}-certificates
+  labels:
+    {{- include "labels.common" . | nindent 4 }}
+webhooks:
+  - name: awsclusters.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/awscluster
+      caBundle: Cg==
+    rules:
+    - apiGroups: ["infrastructure.giantswarm.io"]
+      resources:
+        - awsclusters
+      apiVersions:
+        - v1alpha2
+      operations:
+        - CREATE
+        - UPDATE
+  - name: awsmachinedeployments.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/awsmachinedeployment
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - awsmachinedeployments
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+  - name: awscontrolplanes.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: NoneOnDryRun
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/awscontrolplane
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - "awscontrolplanes"
+        apiVersions:
+          - "v1alpha2"
+        operations:
+          - CREATE
+          - UPDATE
+  - name: clusters.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/cluster
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["cluster.x-k8s.io"]
+        resources:
+          - clusters
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+  - name: g8scontrolplanes.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: NoneOnDryRun
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/g8scontrolplane
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - "g8scontrolplanes"
+        apiVersions:
+          - "v1alpha2"
+        operations:
+          - CREATE
+          - UPDATE
+  - name: machinedeployments.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: None
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/machinedeployment
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["cluster.x-k8s.io"]
+        resources:
+          - machinedeployments
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+  - name: networkpools.{{ include "resource.default.name" . }}.giantswarm.io
+    admissionReviewVersions: [v1]
+    failurePolicy: Ignore
+    sideEffects: NoneOnDryRun
+    clientConfig:
+      service:
+        name: {{ include "resource.default.name" . }}
+        namespace: {{ include "resource.default.namespace" . }}
+        path: /validate/networkpool
+      caBundle: Cg==
+    rules:
+      - apiGroups: ["infrastructure.giantswarm.io"]
+        resources:
+          - "networkpools"
+        apiVersions:
+          - "v1alpha2"
+        operations:
+          - CREATE
+          - UPDATE
