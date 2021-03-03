@@ -3,10 +3,42 @@ package crdconverter
 import (
 	"errors"
 	"fmt"
-	"strings"
 
+	"github.com/giantswarm/microerror"
 	"github.com/giantswarm/micrologger"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/cluster-api/api/v1alpha3"
+	"sigs.k8s.io/cluster-api/api/v1alpha4"
+)
+
+const (
+	ClusterAPIGroup = "cluster.x-k8s.io"
+	KindCluster     = "Cluster"
+	VersionV1Alpha3 = "v1alpha3"
+	VersionV1Alpha4 = "v1alpha4"
+)
+
+var (
+	capiV1Alpha3 = schema.GroupVersion{
+		Group:   ClusterAPIGroup,
+		Version: VersionV1Alpha3,
+	}
+	capiV1Alpha4 = schema.GroupVersion{
+		Group:   ClusterAPIGroup,
+		Version: VersionV1Alpha4,
+	}
+	clusterV1Alpha3 = schema.GroupVersionKind{
+		Group:   capiV1Alpha3.Group,
+		Version: capiV1Alpha3.Version,
+		Kind:    KindCluster,
+	}
+	clusterV1Alpha4 = schema.GroupVersionKind{
+		Group:   capiV1Alpha4.Group,
+		Version: capiV1Alpha4.Version,
+		Kind:    KindCluster,
+	}
 )
 
 type Config struct {
@@ -24,51 +56,57 @@ func New(config Config) (Converter, error) {
 }
 
 func (c Converter) Convert(object *unstructured.Unstructured, toVersion string) (*unstructured.Unstructured, error) {
-	convertedObject := object.DeepCopy()
 	fromVersion := object.GetAPIVersion()
 
 	if toVersion == fromVersion {
 		return nil, errors.New(fmt.Sprintf("conversion from a version to itself should not call the webhook: %s", toVersion))
 	}
 
-	switch object.GetAPIVersion() {
-	case "stable.example.com/v1":
-		switch toVersion {
-		case "stable.example.com/v2":
-			hostPort, ok := convertedObject.Object["hostPort"]
-			if ok {
-				delete(convertedObject.Object, "hostPort")
-				parts := strings.Split(hostPort.(string), ":")
-				if len(parts) != 2 {
-					return nil, errors.New(fmt.Sprintf("invalid hostPort value `%v`", hostPort))
-				}
-				convertedObject.Object["host"] = parts[0]
-				convertedObject.Object["port"] = parts[1]
-			}
-		default:
-			return nil, errors.New(fmt.Sprintf("unexpected conversion version %q", toVersion))
+	var result runtime.Object
+	fromGVK := object.GetObjectKind().GroupVersionKind()
+	fromContent := object.UnstructuredContent()
+
+	switch {
+	case fromGVK == clusterV1Alpha4 && toVersion == capiV1Alpha3.String():
+		var fromCluster v1alpha4.Cluster
+		err := runtime.DefaultUnstructuredConverter.FromUnstructured(fromContent, &fromCluster)
+		if err != nil {
+			return nil, microerror.Mask(err)
 		}
-	case "stable.example.com/v2":
-		switch toVersion {
-		case "stable.example.com/v1":
-			host, hasHost := convertedObject.Object["host"]
-			port, hasPort := convertedObject.Object["port"]
-			if hasHost || hasPort {
-				if !hasHost {
-					host = ""
-				}
-				if !hasPort {
-					port = ""
-				}
-				convertedObject.Object["hostPort"] = fmt.Sprintf("%s:%s", host, port)
-				delete(convertedObject.Object, "host")
-				delete(convertedObject.Object, "port")
-			}
-		default:
-			return nil, errors.New(fmt.Sprintf("unexpected conversion version %q", toVersion))
+
+		toCluster := &v1alpha3.Cluster{}
+		err = toCluster.ConvertFrom(&fromCluster)
+		if err != nil {
+			return nil, microerror.Mask(err)
 		}
+
+		result = toCluster
+	case fromGVK == clusterV1Alpha3 && toVersion == capiV1Alpha4.String():
+		var fromCluster v1alpha3.Cluster
+		err := runtime.DefaultUnstructuredConverter.FromUnstructured(fromContent, &fromCluster)
+		if err != nil {
+			return nil, microerror.Mask(err)
+		}
+
+		toCluster := &v1alpha4.Cluster{}
+		err = fromCluster.ConvertTo(toCluster)
+		if err != nil {
+			return nil, microerror.Mask(err)
+		}
+
+		result = toCluster
 	default:
 		return nil, errors.New(fmt.Sprintf("unexpected conversion version %q", fromVersion))
 	}
-	return convertedObject, nil
+
+	resultData, err := runtime.DefaultUnstructuredConverter.ToUnstructured(result)
+	if err != nil {
+		return nil, microerror.Mask(err)
+	}
+
+	resultUnstructured := &unstructured.Unstructured{
+		Object: resultData,
+	}
+
+	return resultUnstructured, nil
 }

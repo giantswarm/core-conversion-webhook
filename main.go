@@ -75,7 +75,7 @@ func mainErr() error {
 	metrics.Handle("/metrics", promhttp.Handler())
 
 	go serveMetrics(webhookConfig, metrics)
-	serveTLS(webhookConfig, handler)
+	http.ListenAndServe(":8443", handler)
 
 	return nil
 }

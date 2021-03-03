@@ -2,6 +2,7 @@ package crdhandler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -71,7 +72,12 @@ func (h Handler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 	response, err := doConversion(review.Request, h.converter)
 	if err != nil {
-		h.writeErrorResponse(review.Request.UID, err)
+		var uid types.UID
+		if review.Request != nil {
+			uid = review.Request.UID
+		}
+		h.writeResponse(ctx, request, writer, h.writeErrorResponse(uid, err))
+		return
 	}
 
 	h.logger.Debugf(request.Context(), "converted")
@@ -104,6 +110,10 @@ func New(config Config) (Handler, error) {
 // doConversion converts the requested object given the conversion function and returns a conversion response.
 // failures will be reported as Reason in the conversion response.
 func doConversion(convertRequest *v1.ConversionRequest, converter Converter) (*v1.ConversionResponse, error) {
+	if convertRequest == nil {
+		return nil, errors.New("invalid request")
+	}
+
 	var convertedObjects []runtime.RawExtension
 	for _, obj := range convertRequest.Objects {
 		cr := unstructured.Unstructured{}
@@ -117,8 +127,10 @@ func doConversion(convertRequest *v1.ConversionRequest, converter Converter) (*v
 		convertedCR.SetAPIVersion(convertRequest.DesiredAPIVersion)
 		convertedObjects = append(convertedObjects, runtime.RawExtension{Object: convertedCR})
 	}
+
 	return &v1.ConversionResponse{
 		ConvertedObjects: convertedObjects,
+		UID:              convertRequest.UID,
 		Result: metav1.Status{
 			Status: metav1.StatusSuccess,
 		},

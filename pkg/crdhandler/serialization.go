@@ -9,6 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+var defaultMediaType = mediaType{
+	Type:    "application",
+	SubType: "json",
+}
+
 type mediaType struct {
 	Type, SubType string
 }
@@ -23,16 +28,17 @@ func (h Handler) getInputSerializer(contentType string) (runtime.Serializer, err
 
 func (h Handler) getOutputSerializer(accept string) (runtime.Serializer, error) {
 	if len(accept) == 0 {
-		return h.serializers[mediaType{"application", "json"}], nil
+		return h.serializers[defaultMediaType], nil
 	}
 
 	clauses := goautoneg.ParseAccept(accept)
 	for _, clause := range clauses {
 		for k, v := range h.serializers {
 			switch {
+			case clause.Type == "*" && clause.SubType == "*":
+				return h.serializers[defaultMediaType], nil
 			case clause.Type == k.Type && clause.SubType == k.SubType,
-				clause.Type == k.Type && clause.SubType == "*",
-				clause.Type == "*" && clause.SubType == "*":
+				clause.Type == k.Type && clause.SubType == "*":
 				return v, nil
 			}
 		}

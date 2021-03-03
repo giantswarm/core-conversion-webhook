@@ -10,7 +10,7 @@ const (
 )
 
 var (
-	labels = []string{"webhook", "resource"}
+	labels = []string{"webhook"}
 
 	DurationRequests = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metricNamespace,
