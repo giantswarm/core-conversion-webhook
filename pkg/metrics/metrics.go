@@ -5,12 +5,12 @@ import (
 )
 
 const (
-	metricNamespace = "aws_admission_controller"
+	metricNamespace = "capi_core_converter"
 	metricSubsystem = "webhook"
 )
 
 var (
-	labels = []string{"webhook", "resource"}
+	labels = []string{"webhook"}
 
 	DurationRequests = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metricNamespace,

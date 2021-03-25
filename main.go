@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,118 +12,75 @@ import (
 	"github.com/dyson/certman"
 	"github.com/giantswarm/microerror"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/cluster-api/api/v1alpha3"
+	"sigs.k8s.io/cluster-api/api/v1alpha4"
 
 	"github.com/giantswarm/core-conversion-webhook/config"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/awscluster"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/awscontrolplane"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/awsmachinedeployment"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/cluster"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/g8scontrolplane"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/machinedeployment"
-	"github.com/giantswarm/core-conversion-webhook/pkg/aws/networkpool"
-	"github.com/giantswarm/core-conversion-webhook/pkg/mutator"
-	"github.com/giantswarm/core-conversion-webhook/pkg/validator"
+	"github.com/giantswarm/core-conversion-webhook/pkg/crdconverter"
+	"github.com/giantswarm/core-conversion-webhook/pkg/crdhandler"
 )
 
 func main() {
-	config, err := config.Parse()
+	err := mainErr()
 	if err != nil {
-		panic(microerror.JSON(err))
+		_, _ = fmt.Fprintf(os.Stderr, microerror.Pretty(err, true))
+	}
+}
+
+func mainErr() error {
+	webhookConfig, err := config.Parse()
+	if err != nil {
+		return microerror.Mask(err)
 	}
 
-	// Setup handler for mutating webhook
-	awsclusterMutator, err := awscluster.NewMutator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
+	scheme := runtime.NewScheme()
+	{
+		err = v1alpha3.AddToScheme(scheme)
+		if err != nil {
+			return microerror.Mask(err)
+		}
+		err = v1alpha4.AddToScheme(scheme)
+		if err != nil {
+			return microerror.Mask(err)
+		}
 	}
 
-	awscontrolplaneMutator, err := awscontrolplane.NewMutator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
+	var crdHandler http.Handler
+	{
+		crdConverter, err := crdconverter.New(crdconverter.Config{
+			Logger: webhookConfig.Logger,
+		})
+		if err != nil {
+			return microerror.Mask(err)
+		}
 
-	awsmachinedeploymentMutator, err := awsmachinedeployment.NewMutator(config)
-	if err != nil {
-		log.Fatalf("Unable to create G8s Control Plane admitter: %v", err)
-	}
-
-	clusterMutator, err := cluster.NewMutator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	g8scontrolplaneMutator, err := g8scontrolplane.NewMutator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	machinedeploymentMutator, err := machinedeployment.NewMutator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	// Setup handler for validating webhook
-	awsclusterValidator, err := awscluster.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	awscontrolplaneValidator, err := awscontrolplane.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	awsmachinedeploymentValidator, err := awsmachinedeployment.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	clusterValidator, err := cluster.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	g8scontrolplaneValidator, err := g8scontrolplane.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	machinedeploymentValidator, err := machinedeployment.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
-	}
-
-	networkPoolValidator, err := networkpool.NewValidator(config)
-	if err != nil {
-		panic(microerror.JSON(err))
+		crdHandler, err = crdhandler.New(crdhandler.Config{
+			Logger:    webhookConfig.Logger,
+			Converter: crdConverter,
+			Scheme:    scheme,
+		})
+		if err != nil {
+			return microerror.Mask(err)
+		}
 	}
 
 	// Here we register our endpoints.
 	handler := http.NewServeMux()
-	handler.Handle("/mutate/awscluster", mutator.Handler(awsclusterMutator))
-	handler.Handle("/mutate/awsmachinedeployment", mutator.Handler(awsmachinedeploymentMutator))
-	handler.Handle("/mutate/awscontrolplane", mutator.Handler(awscontrolplaneMutator))
-	handler.Handle("/mutate/cluster", mutator.Handler(clusterMutator))
-	handler.Handle("/mutate/g8scontrolplane", mutator.Handler(g8scontrolplaneMutator))
-	handler.Handle("/mutate/machinedeployment", mutator.Handler(machinedeploymentMutator))
-	handler.Handle("/validate/awscluster", validator.Handler(awsclusterValidator))
-	handler.Handle("/validate/awscontrolplane", validator.Handler(awscontrolplaneValidator))
-	handler.Handle("/validate/awsmachinedeployment", validator.Handler(awsmachinedeploymentValidator))
-	handler.Handle("/validate/cluster", validator.Handler(clusterValidator))
-	handler.Handle("/validate/g8scontrolplane", validator.Handler(g8scontrolplaneValidator))
-	handler.Handle("/validate/machinedeployment", validator.Handler(machinedeploymentValidator))
-	handler.Handle("/validate/networkpool", validator.Handler(networkPoolValidator))
+	handler.Handle("/crdconvert", crdHandler)
 
 	handler.HandleFunc("/healthz", healthCheck)
 
 	metrics := http.NewServeMux()
 	metrics.Handle("/metrics", promhttp.Handler())
 
-	go serveMetrics(config, metrics)
-	serveTLS(config, handler)
+	go serveMetrics(webhookConfig, metrics)
+	http.ListenAndServe(":8443", handler)
+
+	return nil
 }
 
-func healthCheck(writer http.ResponseWriter, request *http.Request) {
+func healthCheck(writer http.ResponseWriter, _ *http.Request) {
 	writer.WriteHeader(http.StatusOK)
 	_, err := writer.Write([]byte("ok"))
 	if err != nil {
