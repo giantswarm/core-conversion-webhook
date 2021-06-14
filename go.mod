@@ -13,8 +13,7 @@ require (
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	k8s.io/apiextensions-apiserver v0.20.2
 	k8s.io/apimachinery v0.20.2
-	sigs.k8s.io/cluster-api v0.3.13
-	sigs.k8s.io/controller-runtime v0.8.2
+	sigs.k8s.io/cluster-api v0.3.19
 )
 
 replace sigs.k8s.io/cluster-api => sigs.k8s.io/cluster-api v0.3.11-0.20210302171319-f7351b165992
